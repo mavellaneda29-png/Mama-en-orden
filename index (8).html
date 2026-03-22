@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agenda Familiar 🌸</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #FFF8F5; font-family: Georgia, serif; }
+    ::-webkit-scrollbar { width: 0; }
+    input, textarea, select { font-family: Georgia, serif; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+const DAYS = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+const FULL_DAYS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const MESES_CORTO = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+const COLORES = ["#FF6B9D","#3B82F6","#F59E0B","#10B981","#A78BFA","#F97316","#06B6D4"];
+
+const EMOJIS_NINOS = [
+  "🌸","⚽","🎨","🦋","🌟","🐶","🐱","🦁","🐸","🦊",
+  "🌈","🎀","🎮","🎸","🏊","🤸","🎭","🦄","🐝","🌻",
+  "🏆","🎯","🚀","🦖","🐧","🎪","🍭","🎠","🌊","🦅"
+];
+
+const guardar = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+const cargar  = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch { return d; } };
+
+// ── Componentes base ───────────────────────────────────────
+const Btn = ({onClick,children,color="#FF6B9D",outline=false,small=false,full=false,disabled=false}) => (
+  <button onClick={onClick} disabled={disabled} style={{
+    padding: small?"8px 16px":"12px 20px", borderRadius:16,
+    border: outline?`2px solid ${color}`:"none",
+    background: disabled?"#E0E0E0":outline?"white":`linear-gradient(135deg,${color},${color}cc)`,
+    color: disabled?"#aaa":outline?color:"white",
+    fontSize:small?12:14, fontWeight:"bold", cursor:disabled?"default":"pointer",
+    width:full?"100%":"auto", boxShadow:outline||disabled?"none":`0 4px 12px ${color}40`,
+    fontFamily:"Georgia,serif",
+  }}>{children}</button>
+);
+
+const formatHora = (val) => {
+  const solo = val.replace(/[^0-9]/g,"").slice(0,4);
+  if(solo.length>=3) return solo.slice(0,2)+":"+solo.slice(2);
+  return solo;
+};
+
+const formatFechaInput = (val) => {
+  const solo = val.replace(/[^0-9]/g,"").slice(0,8);
+  if(solo.length>=5) return solo.slice(0,2)+"/"+solo.slice(2,4)+"/"+solo.slice(4);
+  if(solo.length>=3) return solo.slice(0,2)+"/"+solo.slice(2);
+  return solo;
+};
+
+const Input = ({label,value,onChange,placeholder,type="text",isHora=false,isFecha=false}) => (
+  <div style={{marginBottom:12}}>
+    {label&&<label style={{fontSize:12,color:"#888",fontWeight:"bold",display:"block",marginBottom:4}}>{label}</label>}
+    <input type={type} value={value} onChange={e=>onChange(isHora?formatHora(e.target.value):isFecha?formatFechaInput(e.target.value):e.target.value)} placeholder={placeholder}
+      style={{width:"100%",padding:"10px 14px",borderRadius:12,border:"1px solid #E8E8E8",fontSize:13,color:"#2D2D2D",outline:"none",background:"white"}}/>
+  </div>
+);
+
+const Select = ({label,value,onChange,options}) => (
+  <div style={{marginBottom:12}}>
+    {label&&<label style={{fontSize:12,color:"#888",fontWeight:"bold",display:"block",marginBottom:4}}>{label}</label>}
+    <select value={value} onChange={e=>onChange(e.target.value)}
+      style={{width:"100%",padding:"10px 14px",borderRadius:12,border:"1px solid #E8E8E8",fontSize:13,color:"#2D2D2D",outline:"none",background:"white"}}>
+      {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  </div>
+);
+
+const Modal = ({titulo,onCerrar,children}) => (
+  <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}}
+    onClick={e=>{if(e.target===e.currentTarget)onCerrar();}}>
+    <div style={{background:"white",borderRadius:"24px 24px 0 0",padding:"24px 20px 32px",width:"100%",maxWidth:420,maxHeight:"88vh",overflowY:"auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <h3 style={{fontSize:16,color:"#2D2D2D",fontWeight:"bold"}}>{titulo}</h3>
+        <button onClick={onCerrar} style={{background:"#F5F5F5",border:"none",borderRadius:"50%",width:32,height:32,cursor:"pointer",fontSize:16}}>✕</button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+// ── Selector de emoji ──────────────────────────────────────
+const EmojiPicker = ({value, onChange}) => (
+  <div style={{marginBottom:12}}>
+    <label style={{fontSize:12,color:"#888",fontWeight:"bold",display:"block",marginBottom:8}}>Ícono del hijo/a</label>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8}}>
+      {EMOJIS_NINOS.map(e=>(
+        <button key={e} onClick={()=>onChange(e)}
+          style={{fontSize:22,padding:"8px",borderRadius:12,border:`2px solid ${value===e?"#FF6B9D":"transparent"}`,
+            background:value===e?"#FDE8F0":"#F9F9F9",cursor:"pointer",transition:"all 0.15s"}}>
+          {e}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+// ── Mini calendario ────────────────────────────────────────
+const MiniCalendario = ({value, onChange}) => {
+  const hoy = new Date();
+  const [mes, setMes] = React.useState(value ? new Date(value).getMonth() : hoy.getMonth());
+  const [anio, setAnio] = React.useState(value ? new Date(value).getFullYear() : hoy.getFullYear());
+
+  const primerDia = new Date(anio, mes, 1).getDay();
+  const diasEnMes = new Date(anio, mes+1, 0).getDate();
+  const offset = primerDia===0?6:primerDia-1;
+
+  const seleccionada = value ? new Date(value) : null;
+  const esSeleccionada = (d) => seleccionada && seleccionada.getDate()===d && seleccionada.getMonth()===mes && seleccionada.getFullYear()===anio;
+  const esHoy = (d) => hoy.getDate()===d && hoy.getMonth()===mes && hoy.getFullYear()===anio;
+
+  const anterior = () => { if(mes===0){setMes(11);setAnio(anio-1);}else setMes(mes-1); };
+  const siguiente = () => { if(mes===11){setMes(0);setAnio(anio+1);}else setMes(mes+1); };
+
+  const seleccionar = (d) => {
+    const fecha = new Date(anio, mes, d);
+    onChange(fecha.toISOString().split("T")[0]);
+  };
+
+  const celdas = [];
+  for(let i=0;i<offset;i++) celdas.push(null);
+  for(let i=1;i<=diasEnMes;i++) celdas.push(i);
+
+  return (
+    <div style={{marginBottom:12}}>
+      <label style={{fontSize:12,color:"#888",fontWeight:"bold",display:"block",marginBottom:8}}>Fecha del evento</label>
+      <div style={{background:"#FFF8F5",borderRadius:16,padding:"12px",border:"1px solid #F0E0E8"}}>
+        {/* Header mes */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <button onClick={anterior} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:"#FF6B9D",padding:"0 4px"}}>‹</button>
+          <span style={{fontSize:14,fontWeight:"bold",color:"#2D2D2D"}}>{MESES[mes]} {anio}</span>
+          <button onClick={siguiente} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:"#FF6B9D",padding:"0 4px"}}>›</button>
+        </div>
+        {/* Días semana */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+          {["Lu","Ma","Mi","Ju","Vi","Sa","Do"].map(d=>(
+            <div key={d} style={{textAlign:"center",fontSize:10,color:"#aaa",fontWeight:"bold",padding:"2px 0"}}>{d}</div>
+          ))}
+        </div>
+        {/* Días */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+          {celdas.map((d,i)=>(
+            <button key={i} onClick={()=>d&&seleccionar(d)} disabled={!d}
+              style={{padding:"6px 2px",borderRadius:8,border:"none",cursor:d?"pointer":"default",fontSize:12,fontWeight:"bold",
+                background:d&&esSeleccionada(d)?"#FF6B9D":d&&esHoy(d)?"#FDE8F0":"transparent",
+                color:d&&esSeleccionada(d)?"white":d&&esHoy(d)?"#FF6B9D":d?"#2D2D2D":"transparent",
+                textAlign:"center"}}>
+              {d||""}
+            </button>
+          ))}
+        </div>
+        {value&&<div style={{marginTop:8,textAlign:"center",fontSize:12,color:"#FF6B9D",fontWeight:"bold"}}>
+          ✓ {new Date(value+"T12:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"})}
+        </div>}
+      </div>
+    </div>
+  );
+};
+
+// ════════════════════════════════════════════════════════════
+// APP PRINCIPAL
+// ════════════════════════════════════════════════════════════
+function App() {
+  const [tab, setTab]     = React.useState("home");
+  const [kids, setKids]   = React.useState(()=>cargar("kids",[]));
+  const [acts, setActs]   = React.useState(()=>cargar("acts",[]));   // rutinas semanales
+  const [eventos, setEventos] = React.useState(()=>cargar("eventos",[])); // eventos con fecha
+  const [recs, setRecs]   = React.useState(()=>cargar("recs",[]));
+  const [selectedKid, setSelectedKid] = React.useState(0);
+  const [selectedDay, setSelectedDay] = React.useState(0);
+  const [agendaVista, setAgendaVista] = React.useState("semana"); // "semana" | "eventos"
+  const [verManana, setVerManana] = React.useState(false);
+
+  const [modalHijo,  setModalHijo]  = React.useState(false);
+  const [modalAct,   setModalAct]   = React.useState(false);
+  const [modalEvento,setModalEvento]= React.useState(false);
+  const [modalRec,   setModalRec]   = React.useState(false);
+  const [editHijo,   setEditHijo]   = React.useState(null);
+  const [editAct,    setEditAct]    = React.useState(null);
+  const [editEvento, setEditEvento] = React.useState(null);
+  const [editRec,    setEditRec]    = React.useState(null);
+
+  const hijoVacio    = {nombre:"",edad:"",emoji:"🌸",medico:"",telefono:"",obraSocial:"",grupoSanguineo:"",ultimaVacuna:"",proximaVacuna:""};
+  const actVacia     = {dia:"Lunes",hora:"",actividad:"",kidIndex:0,lugar:""};
+  const eventoVacio  = {fecha:"",hora:"",titulo:"",kidIndex:0,lugar:"",nota:""};
+  const recVacio     = {fecha:"",hora:"",tipo:"💉 Vacuna",descripcion:"",kidNombre:"Todos",estado:"⏳ Pendiente"};
+
+  const [formHijo,   setFormHijo]   = React.useState(hijoVacio);
+  const [formAct,    setFormAct]    = React.useState(actVacia);
+  const [formEvento, setFormEvento] = React.useState(eventoVacio);
+  const [formRec,    setFormRec]    = React.useState(recVacio);
+
+  const today = new Date();
+  const todayIndex = today.getDay()===0?6:today.getDay()-1;
+  const todayStr = today.toISOString().split("T")[0];
+
+  React.useEffect(()=>guardar("kids",kids),[kids]);
+  React.useEffect(()=>guardar("acts",acts),[acts]);
+  React.useEffect(()=>guardar("eventos",eventos),[eventos]);
+  React.useEffect(()=>guardar("recs",recs),[recs]);
+
+  // Actividades de hoy (rutinas + eventos)
+  const rutinasHoy = acts.filter(a=>a.dia===FULL_DAYS[todayIndex]);
+  const eventosHoy = eventos.filter(e=>e.fecha===todayStr);
+  const totalHoy = rutinasHoy.length + eventosHoy.length;
+
+  // ── CRUD Hijos ─────────────────────────────────────────
+  const abrirNuevoHijo = ()=>{setFormHijo(hijoVacio);setEditHijo(null);setModalHijo(true);};
+  const abrirEditHijo  = (i)=>{setFormHijo(kids[i]);setEditHijo(i);setModalHijo(true);};
+  const guardarHijo = ()=>{
+    if(!formHijo.nombre.trim()) return;
+    if(editHijo!==null){const k=[...kids];k[editHijo]=formHijo;setKids(k);}
+    else setKids([...kids,formHijo]);
+    setModalHijo(false);
+  };
+  const borrarHijo = (i)=>{if(confirm("¿Borrar este hijo?"))setKids(kids.filter((_,idx)=>idx!==i));};
+
+  // ── CRUD Rutinas ───────────────────────────────────────
+  const abrirNuevaAct = ()=>{setFormAct(actVacia);setEditAct(null);setModalAct(true);};
+  const abrirEditAct  = (i)=>{setFormAct(acts[i]);setEditAct(i);setModalAct(true);};
+  const guardarAct = ()=>{
+    if(!formAct.actividad.trim()) return;
+    if(editAct!==null){const a=[...acts];a[editAct]=formAct;setActs(a);}
+    else setActs([...acts,formAct]);
+    setModalAct(false);
+  };
+  const borrarAct = (i)=>{if(confirm("¿Borrar?"))setActs(acts.filter((_,idx)=>idx!==i));};
+
+  // ── CRUD Eventos ───────────────────────────────────────
+  const abrirNuevoEvento = ()=>{setFormEvento(eventoVacio);setEditEvento(null);setModalEvento(true);};
+  const abrirEditEvento  = (i)=>{setFormEvento(eventos[i]);setEditEvento(i);setModalEvento(true);};
+  const guardarEvento = ()=>{
+    if(!formEvento.titulo.trim()||!formEvento.fecha) return;
+    if(editEvento!==null){const e=[...eventos];e[editEvento]=formEvento;setEventos(e);}
+    else setEventos([...eventos,formEvento]);
+    setModalEvento(false);
+  };
+  const borrarEvento = (i)=>{if(confirm("¿Borrar?"))setEventos(eventos.filter((_,idx)=>idx!==i));};
+
+  // ── CRUD Recordatorios ─────────────────────────────────
+  const abrirNuevoRec = ()=>{setFormRec(recVacio);setEditRec(null);setModalRec(true);};
+  const abrirEditRec  = (i)=>{setFormRec(recs[i]);setEditRec(i);setModalRec(true);};
+  const guardarRec = ()=>{
+    if(!formRec.descripcion.trim()) return;
+    if(editRec!==null){const r=[...recs];r[editRec]=formRec;setRecs(r);}
+    else setRecs([...recs,formRec]);
+    setModalRec(false);
+  };
+  const borrarRec = (i)=>{if(confirm("¿Borrar?"))setRecs(recs.filter((_,idx)=>idx!==i));};
+  const toggleEstado = (i)=>{const r=[...recs];r[i].estado=r[i].estado==="✅ Listo"?"⏳ Pendiente":"✅ Listo";setRecs(r);};
+
+  const actsDia = (d)=>acts.filter(a=>a.dia===FULL_DAYS[d]).sort((a,b)=>a.hora.localeCompare(b.hora));
+
+  // Eventos ordenados por fecha
+  const eventosOrdenados = [...eventos].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  const eventosFuturos = eventosOrdenados.filter(e=>e.fecha>=todayStr);
+  const eventosPasados = eventosOrdenados.filter(e=>e.fecha<todayStr);
+
+  const formatFecha = (str) => {
+    if(!str) return "";
+    const d = new Date(str+"T12:00:00");
+    return d.toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"});
+  };
+
+  // ════════════════════════════════════════════════════════
+  return (
+    <div style={{minHeight:"100vh",background:"#FFF8F5",maxWidth:420,margin:"0 auto",position:"relative"}}>
+
+      {/* HEADER */}
+      <div style={{background:"linear-gradient(135deg,#FF6B9D 0%,#FF9A5C 100%)",padding:"32px 24px 48px",borderRadius:"0 0 32px 32px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-20,right:-20,width:120,height:120,background:"rgba(255,255,255,0.1)",borderRadius:"50%"}}/>
+        <p style={{color:"rgba(255,255,255,0.8)",margin:0,fontSize:13}}>{FULL_DAYS[todayIndex]}, {today.getDate()} de {MESES[today.getMonth()]}</p>
+        <h1 style={{color:"white",margin:"4px 0 0",fontSize:26,fontWeight:"normal"}}>¡Hola! 👋</h1>
+        <p style={{color:"rgba(255,255,255,0.85)",margin:"6px 0 0",fontSize:14}}>
+          {totalHoy>0?<>Hoy tenés <strong>{totalHoy} actividad{totalHoy>1?"es":""}</strong></>:"Hoy es un día libre 🌿"}
+        </p>
+        {(rutinasHoy.length>0||eventosHoy.length>0)&&(
+          <div style={{marginTop:16,display:"flex",gap:10,overflowX:"auto"}}>
+            {[...rutinasHoy,...eventosHoy].slice(0,3).map((a,i)=>(
+              <div key={i} style={{background:"rgba(255,255,255,0.2)",borderRadius:16,padding:"10px 14px",flexShrink:0}}>
+                <div style={{color:"white",fontSize:12,fontWeight:"bold"}}>{kids[a.kidIndex]?.nombre||""}</div>
+                <div style={{color:"rgba(255,255,255,0.85)",fontSize:11}}>{a.actividad||a.titulo} · {a.hora}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* CONTENIDO */}
+      <div style={{padding:"0 20px 100px",marginTop:-16}}>
+
+        {/* ── INICIO ── */}
+        {tab==="home"&&<>
+          <div style={{marginTop:24,display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <h2 style={{fontSize:16,color:"#2D2D2D",fontWeight:"normal"}}>Mis hijos</h2>
+            <Btn onClick={abrirNuevoHijo} small>+ Agregar</Btn>
+          </div>
+          {kids.length===0?(
+            <div onClick={abrirNuevoHijo} style={{background:"white",borderRadius:20,padding:28,textAlign:"center",boxShadow:"0 2px 12px rgba(0,0,0,0.05)",cursor:"pointer",border:"2px dashed #FFB3D1"}}>
+              <div style={{fontSize:32,marginBottom:8}}>👶</div>
+              <div style={{color:"#FF6B9D",fontSize:14,fontWeight:"bold"}}>Tocá para agregar tu primer hijo</div>
+            </div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {kids.map((kid,i)=>(
+                <div key={i} style={{background:"white",borderRadius:20,padding:"16px 18px",display:"flex",alignItems:"center",gap:14,boxShadow:"0 2px 16px rgba(0,0,0,0.06)",borderLeft:`4px solid ${COLORES[i%COLORES.length]}`}}>
+                  <div onClick={()=>{setSelectedKid(i);setTab("ficha");}} style={{width:48,height:48,borderRadius:"50%",background:`${COLORES[i%COLORES.length]}20`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0,cursor:"pointer"}}>{kid.emoji||"🌸"}</div>
+                  <div style={{flex:1,cursor:"pointer"}} onClick={()=>{setSelectedKid(i);setTab("ficha");}}>
+                    <div style={{fontWeight:"bold",fontSize:15,color:"#2D2D2D"}}>{kid.nombre}</div>
+                    <div style={{fontSize:12,color:"#888",marginTop:2}}>{kid.edad}{kid.edad?" años":""}</div>
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>abrirEditHijo(i)} style={{background:"#F5F5F5",border:"none",borderRadius:10,padding:"6px 10px",cursor:"pointer",fontSize:13}}>✏️</button>
+                    <button onClick={()=>borrarHijo(i)} style={{background:"#FDE8F0",border:"none",borderRadius:10,padding:"6px 10px",cursor:"pointer",fontSize:13}}>🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Botón VER MAÑANA */}
+          {(()=>{
+            const manana = new Date(today);
+            manana.setDate(today.getDate()+1);
+            const mananaStr = manana.toISOString().split("T")[0];
+            const mananaIndex = manana.getDay()===0?6:manana.getDay()-1;
+            const rutinasManana = acts.filter(a=>a.dia===FULL_DAYS[mananaIndex]);
+            const eventosManana = eventos.filter(e=>e.fecha===mananaStr);
+            const recsManana = recs.filter(r=>r.fecha===mananaStr);
+            const totalManana = rutinasManana.length + eventosManana.length;
+            return(
+              <div style={{marginTop:24}}>
+                <button onClick={()=>setVerManana(!verManana)}
+                  style={{width:"100%",padding:"14px",borderRadius:20,border:"2px solid #FF6B9D",background:verManana?"linear-gradient(135deg,#FF6B9D,#FF9A5C)":"white",
+                    color:verManana?"white":"#FF6B9D",fontSize:14,fontWeight:"bold",cursor:"pointer",
+                    boxShadow:verManana?"0 4px 16px rgba(255,107,157,0.3)":"none",fontFamily:"Georgia,serif"}}>
+                  {verManana?"✕ Cerrar":"👀 ¿Qué hay para mañana?"}
+                </button>
+                {verManana&&<div style={{background:"white",borderRadius:20,padding:"18px",marginTop:12,boxShadow:"0 2px 16px rgba(0,0,0,0.08)"}}>
+                  <div style={{fontSize:14,fontWeight:"bold",color:"#FF6B9D",marginBottom:12}}>
+                    {FULL_DAYS[mananaIndex]}, {manana.getDate()} de {MESES[manana.getMonth()]}
+                  </div>
+                  {totalManana===0&&recsManana.length===0?(
+                    <div style={{textAlign:"center",color:"#ccc",fontSize:13,padding:"8px 0"}}>🌿 Día libre mañana, ¡a descansar!</div>
+                  ):<>
+                    {rutinasManana.map((a,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #F5F5F5"}}>
+                        <span style={{fontSize:20}}>{kids[a.kidIndex]?.emoji||"🌸"}</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:13,color:"#2D2D2D",fontWeight:"500"}}>{a.actividad}</div>
+                          <div style={{fontSize:11,color:"#aaa"}}>{kids[a.kidIndex]?.nombre||""} · {a.hora} {a.lugar?"· "+a.lugar:""}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {eventosManana.map((e,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #F5F5F5"}}>
+                        <span style={{fontSize:20}}>🗓️</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:13,color:"#2D2D2D",fontWeight:"500"}}>{e.titulo}</div>
+                          <div style={{fontSize:11,color:"#aaa"}}>{kids[e.kidIndex]?.nombre||""} {e.hora?"· "+e.hora:""}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {recsManana.slice(0,2).map((r,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #F5F5F5"}}>
+                        <span style={{fontSize:20}}>{r.tipo.split(" ")[0]}</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:13,color:"#FF9A5C",fontWeight:"500"}}>🔔 {r.descripcion}</div>
+                          <div style={{fontSize:11,color:"#aaa"}}>{r.kidNombre} {r.hora?"· "+r.hora:""}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </>}
+                </div>}
+              </div>
+            );
+          })()}
+
+          {/* Próximos eventos */}
+          {eventosFuturos.length>0&&<>
+            <div style={{marginTop:24,marginBottom:14}}>
+              <h2 style={{fontSize:16,color:"#2D2D2D",fontWeight:"normal"}}>Próximos eventos 📅</h2>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {eventosFuturos.slice(0,3).map((e,i)=>(
+                <div key={i} style={{background:"white",borderRadius:16,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 2px 12px rgba(0,0,0,0.05)",borderLeft:"4px solid #3B82F6"}}>
+                  <div style={{textAlign:"center",minWidth:40}}>
+                    <div style={{fontSize:11,color:"#aaa",textTransform:"uppercase"}}>{MESES_CORTO[new Date(e.fecha+"T12:00:00").getMonth()]}</div>
+                    <div style={{fontSize:20,fontWeight:"bold",color:"#3B82F6",lineHeight:1}}>{new Date(e.fecha+"T12:00:00").getDate()}</div>
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,color:"#2D2D2D",fontWeight:"500"}}>{e.titulo}</div>
+                    <div style={{fontSize:11,color:"#aaa"}}>{kids[e.kidIndex]?.nombre||""} {e.hora?"· "+e.hora:""}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>}
+
+          {/* Recordatorios pendientes */}
+          {recs.filter(r=>r.estado==="⏳ Pendiente").length>0&&<>
+            <div style={{marginTop:24,marginBottom:14}}>
+              <h2 style={{fontSize:16,color:"#2D2D2D",fontWeight:"normal"}}>Recordatorios 🔔</h2>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {recs.filter(r=>r.estado==="⏳ Pendiente").slice(0,3).map((r,i)=>(
+                <div key={i} style={{background:"white",borderRadius:16,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 2px 12px rgba(0,0,0,0.05)"}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:"#FDE8F0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{r.tipo.split(" ")[0]}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,color:"#2D2D2D",fontWeight:"500"}}>{r.descripcion}</div>
+                    <div style={{fontSize:11,color:"#aaa"}}>{r.kidNombre} · {r.fecha}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>}
+        </>}
+
+        {/* ── AGENDA ── */}
+        {tab==="agenda"&&<>
+          <div style={{marginTop:24,marginBottom:16}}>
+            <h2 style={{fontSize:16,color:"#2D2D2D",fontWeight:"normal",marginBottom:12}}>Agenda</h2>
+            {/* Toggle semana / eventos */}
+            <div style={{display:"flex",background:"#F0E8F0",borderRadius:16,padding:4,marginBottom:16}}>
+              {[{id:"semana",label:"📅 Rutina semanal"},{id:"eventos",label:"🗓️ Eventos"}].map(v=>(
+                <button key={v.id} onClick={()=>setAgendaVista(v.id)}
+                  style={{flex:1,padding:"8px",borderRadius:12,border:"none",cursor:"pointer",fontSize:12,fontWeight:"bold",
+                    background:agendaVista===v.id?"white":"transparent",
+                    color:agendaVista===v.id?"#FF6B9D":"#888",
+                    boxShadow:agendaVista===v.id?"0 2px 8px rgba(0,0,0,0.08)":"none"}}>
+                  {v.label}
+                </button>
+              ))}
+            </div>
+
+            {/* RUTINA SEMANAL */}
+            {agendaVista==="semana"&&<>
+              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+                <Btn onClick={abrirNuevaAct} small>+ Agregar rutina</Btn>
+              </div>
+              <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8}}>
+                {DAYS.map((d,i)=>(
+                  <button key={i} onClick={()=>setSelectedDay(i)}
+                    style={{flexShrink:0,padding:"8px 14px",borderRadius:20,border:"none",cursor:"pointer",
+                      background:selectedDay===i?"linear-gradient(135deg,#FF6B9D,#FF9A5C)":"white",
+                      color:selectedDay===i?"white":"#666",fontWeight:selectedDay===i?"bold":"normal",fontSize:13,
+                      boxShadow:selectedDay===i?"0 4px 12px rgba(255,107,157,0.35)":"0 1px 6px rgba(0,0,0,0.06)"}}>
+                    {d}{i===todayIndex&&<span style={{display:"block",fontSize:8,textAlign:"center"}}>●</span>}
+                  </button>
+                ))}
+              </div>
+              <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:10}}>
+                {actsDia(selectedDay).length===0?(
+                  <div style={{background:"white",borderRadius:20,padding:28,textAlign:"center",color:"#ccc",fontSize:14,boxShadow:"0 2px 12px rgba(0,0,0,0.05)"}}>
+                    🌿 Sin actividades este día
+                  </div>
+                ):actsDia(selectedDay).map((a,i)=>{
+                  const idx=acts.indexOf(a);
+                  const kidColor=COLORES[(a.kidIndex||0)%COLORES.length];
+                  return(
+                    <div key={i} style={{background:"white",borderRadius:20,padding:"14px 18px",display:"flex",alignItems:"center",gap:14,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",borderLeft:`4px solid ${kidColor}`}}>
+                      <div style={{minWidth:44,fontWeight:"bold",fontSize:15,color:kidColor}}>{a.hora}</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:"bold",fontSize:14,color:"#2D2D2D"}}>{a.actividad}</div>
+                        <div style={{fontSize:12,color:"#888"}}>{kids[a.kidIndex]?.nombre||""} · {a.lugar}</div>
+                      </div>
+                      <div style={{display:"flex",gap:4}}>
+                        <button onClick={()=>abrirEditAct(idx)} style={{background:"#F5F5F5",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer",fontSize:12}}>✏️</button>
+                        <button onClick={()=>borrarAct(idx)} style={{background:"#FDE8F0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer",fontSize:12}}>🗑️</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>}
+
+            {/* EVENTOS CON FECHA - CALENDARIO VISUAL */}
+            {agendaVista==="eventos"&&(()=>{
+              const [calMes, setCalMes] = React.useState(today.getMonth());
+              const [calAnio, setCalAnio] = React.useState(today.getFullYear());
+              const [diaSeleccionado, setDiaSeleccionado] = React.useState(null);
+
+              const primerDia = new Date(calAnio, calMes, 1).getDay();
+              const diasEnMes = new Date(calAnio, calMes+1, 0).getDate();
+              const offset = primerDia===0?6:primerDia-1;
+
+              const eventosDelMes = eventos.filter(e=>{
+                if(!e.fecha) return false;
+                const d = new Date(e.fecha+"T12:00:00");
+                return d.getMonth()===calMes && d.getFullYear()===calAnio;
+              });
+
+              // Rutinas: marcamos los días del mes que coincidan con el día de semana
+              const rutinasDelMes = [];
+              for(let d=1;d<=diasEnMes;d++){
+                const fecha = new Date(calAnio,calMes,d);
+                const diaSemana = fecha.getDay()===0?6:fecha.getDay()-1;
+                const rutinasDia = acts.filter(a=>a.dia===FULL_DAYS[diaSemana]);
+                if(rutinasDia.length>0) rutinasDelMes.push({dia:d, rutinas:rutinasDia});
+              }
+
+              const eventosEnDia = (d) => eventosDelMes.filter(e=>new Date(e.fecha+"T12:00:00").getDate()===d);
+              const rutinasEnDia = (d) => {
+                const fecha = new Date(calAnio,calMes,d);
+                const diaSemana = fecha.getDay()===0?6:fecha.getDay()-1;
+                return acts.filter(a=>a.dia===FULL_DAYS[diaSemana]);
+              };
+              const tieneCosas = (d) => eventosEnDia(d).length>0 || rutinasEnDia(d).length>0;
+              const esHoy = (d) => d===today.getDate()&&calMes===today.getMonth()&&calAnio===today.getFullYear();
+
+              const anterior = ()=>{ if(calMes===0){setCalMes(11);setCalAnio(calAnio-1);}else setCalMes(calMes-1); setDiaSeleccionado(null); };
+              const siguiente = ()=>{ if(calMes===11){setCalMes(0);setCalAnio(calAnio+1);}else setCalMes(calMes+1); setDiaSeleccionado(null); };
+
+              const celdas = [];
+              for(let i=0;i<offset;i++) celdas.push(null);
+              for(let i=1;i<=diasEnMes;i++) celdas.push(i);
+
+              const evsdia = diaSeleccionado ? eventosEnDia(diaSeleccionado) : [];
+              const rutsdia = diaSeleccionado ? rutinasEnDia(diaSeleccionado) : [];
+
+              return(<>
+                <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+                  <Btn onClick={abrirNuevoEvento} small>+ Agregar evento</Btn>
+                </div>
+
+                {/* Calendario */}
+                <div style={{background:"white",borderRadius:20,padding:"16px",boxShadow:"0 2px 16px rgba(0,0,0,0.06)",marginBottom:12}}>
+                  {/* Header */}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <button onClick={anterior} style={{background:"none",border:"none",cursor:"pointer",fontSize:20,color:"#FF6B9D",padding:"0 8px"}}>‹</button>
+                    <span style={{fontSize:15,fontWeight:"bold",color:"#2D2D2D"}}>{MESES[calMes].charAt(0).toUpperCase()+MESES[calMes].slice(1)} {calAnio}</span>
+                    <button onClick={siguiente} style={{background:"none",border:"none",cursor:"pointer",fontSize:20,color:"#FF6B9D",padding:"0 8px"}}>›</button>
+                  </div>
+                  {/* Días semana */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:6}}>
+                    {["Lu","Ma","Mi","Ju","Vi","Sa","Do"].map(d=>(
+                      <div key={d} style={{textAlign:"center",fontSize:11,color:"#aaa",fontWeight:"bold",padding:"2px 0"}}>{d}</div>
+                    ))}
+                  </div>
+                  {/* Días */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+                    {celdas.map((d,i)=>{
+                      const evs = d ? eventosEnDia(d) : [];
+                      const ruts = d ? rutinasEnDia(d) : [];
+                      const selec = d && diaSeleccionado===d;
+                      const hoy = d && esHoy(d);
+                      return(
+                        <div key={i} onClick={()=>d&&tieneCosas(d)&&setDiaSeleccionado(selec?null:d)}
+                          style={{position:"relative",padding:"6px 2px",borderRadius:10,
+                            background:selec?"#FF6B9D":hoy?"#FDE8F0":"transparent",
+                            cursor:d&&tieneCosas(d)?"pointer":"default",textAlign:"center",minHeight:44}}>
+                          <div style={{fontSize:13,fontWeight:hoy||selec?"bold":"normal",
+                            color:selec?"white":hoy?"#FF6B9D":d?"#2D2D2D":"transparent"}}>{d||""}</div>
+                          {d&&(evs.length>0||ruts.length>0)&&(
+                            <div style={{display:"flex",justifyContent:"center",gap:2,marginTop:2,flexWrap:"wrap"}}>
+                              {evs.slice(0,2).map((_,j)=>(
+                                <div key={j} style={{width:6,height:6,borderRadius:"50%",background:selec?"white":"#FF6B9D"}}/>
+                              ))}
+                              {ruts.length>0&&(
+                                <div style={{width:6,height:6,borderRadius:"50%",background:selec?"white":"#3B82F6"}}/>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Leyenda */}
+                  <div style={{display:"flex",gap:16,marginTop:10,justifyContent:"center"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888"}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:"#FF6B9D"}}/> Eventos
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888"}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:"#3B82F6"}}/> Rutinas
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detalle del día seleccionado */}
+                {diaSeleccionado&&(
+                  <div style={{background:"white",borderRadius:20,padding:"16px 18px",boxShadow:"0 2px 16px rgba(0,0,0,0.08)",marginBottom:12,borderTop:"3px solid #FF6B9D"}}>
+                    <div style={{fontSize:14,fontWeight:"bold",color:"#FF6B9D",marginBottom:12}}>
+                      {FULL_DAYS[new Date(calAnio,calMes,diaSeleccionado).getDay()===0?6:new Date(calAnio,calMes,diaSeleccionado).getDay()-1]} {diaSeleccionado} de {MESES[calMes]}
+                    </div>
+                    {rutsdia.map((a,i)=>{
+                      const kidColor=COLORES[(a.kidIndex||0)%COLORES.length];
+                      return(
+                        <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #F5F5F5"}}>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:kidColor,flexShrink:0}}/>
+                          <span style={{fontSize:12,fontWeight:"bold",color:kidColor,minWidth:36}}>{a.hora}</span>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:13,color:"#2D2D2D"}}>{a.actividad}</div>
+                            <div style={{fontSize:11,color:"#aaa"}}>{kids[a.kidIndex]?.nombre||""} · {a.lugar}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {evsdia.map((e,i)=>{
+                      const idx=eventos.indexOf(e);
+                      const kidColor=COLORES[(e.kidIndex||0)%COLORES.length];
+                      return(
+                        <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #F5F5F5"}}>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:"#FF6B9D",flexShrink:0}}/>
+                          <span style={{fontSize:12,fontWeight:"bold",color:"#FF6B9D",minWidth:36}}>{e.hora}</span>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:13,color:"#2D2D2D",fontWeight:"500"}}>{e.titulo}</div>
+                            <div style={{fontSize:11,color:"#aaa"}}>{kids[e.kidIndex]?.nombre||""} {e.lugar?"· "+e.lugar:""}</div>
+                          </div>
+                          <div style={{display:"flex",gap:4}}>
+                            <button onClick={()=>abrirEditEvento(idx)} style={{background:"#F5F5F5",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer",fontSize:11}}>✏️</button>
+                            <button onClick={()=>borrarEvento(idx)} style={{background:"#FDE8F0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer",fontSize:11}}>🗑️</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>);
+            })()}
+          </div>
+        </>}
+
+        {/* ── FICHAS ── */}
+        {tab==="ficha"&&<>
+          <div style={{marginTop:24,marginBottom:16}}>
+            {kids.length>1&&(
+              <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:8}}>
+                {kids.map((k,i)=>(
+                  <button key={i} onClick={()=>setSelectedKid(i)}
+                    style={{flexShrink:0,padding:"6px 16px",borderRadius:20,border:`2px solid ${COLORES[i%COLORES.length]}`,
+                      background:selectedKid===i?COLORES[i%COLORES.length]:"white",
+                      color:selectedKid===i?"white":COLORES[i%COLORES.length],fontSize:12,cursor:"pointer",fontWeight:"bold"}}>
+                    {k.emoji||"🌸"} {k.nombre}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {kids.length===0?(
+            <div style={{background:"white",borderRadius:20,padding:28,textAlign:"center",boxShadow:"0 2px 12px rgba(0,0,0,0.05)"}}>
+              <div style={{fontSize:32,marginBottom:8}}>👶</div>
+              <div style={{color:"#aaa",fontSize:14}}>Primero agregá un hijo desde Inicio</div>
+            </div>
+          ):(() => {
+            const kid=kids[selectedKid]||kids[0];
+            const color=COLORES[(selectedKid||0)%COLORES.length];
+            return(<>
+              <div style={{background:`linear-gradient(135deg,${color}20,${color}08)`,borderRadius:24,padding:20,textAlign:"center",marginBottom:16,border:`1px solid ${color}25`}}>
+                <div style={{fontSize:52}}>{kid.emoji||"🌸"}</div>
+                <h2 style={{margin:"8px 0 4px",fontSize:20,color:"#2D2D2D",fontWeight:"normal"}}>{kid.nombre}</h2>
+                <p style={{margin:0,color:"#888",fontSize:13}}>{kid.edad}{kid.edad?" años":""}</p>
+                <button onClick={()=>abrirEditHijo(selectedKid)} style={{marginTop:10,background:"white",border:`1px solid ${color}`,borderRadius:12,padding:"6px 16px",color:color,fontSize:12,cursor:"pointer",fontWeight:"bold"}}>✏️ Editar ficha</button>
+              </div>
+              <div style={{background:"white",borderRadius:20,padding:18,marginBottom:12,boxShadow:"0 2px 12px rgba(0,0,0,0.05)"}}>
+                <h3 style={{margin:"0 0 14px",fontSize:13,color:"#FF6B9D"}}>🩺 DATOS MÉDICOS</h3>
+                {[["Médico",kid.medico],["Teléfono",kid.telefono],["Obra social",kid.obraSocial],["Grupo sanguíneo",kid.grupoSanguineo]].map(([l,v],i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:i<3?"1px solid #F5F5F5":"none"}}>
+                    <span style={{fontSize:12,color:"#888"}}>{l}</span>
+                    <span style={{fontSize:13,color:v?"#2D2D2D":"#ddd"}}>{v||"—"}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:"white",borderRadius:20,padding:18,marginBottom:12,boxShadow:"0 2px 12px rgba(0,0,0,0.05)"}}>
+                <h3 style={{margin:"0 0 14px",fontSize:13,color:"#FF6B9D"}}>💉 VACUNAS</h3>
+                <div style={{padding:"8px 0",borderBottom:"1px solid #F5F5F5"}}>
+                  <div style={{fontSize:11,color:"#aaa"}}>Última vacuna</div>
+                  <div style={{fontSize:13,color:"#2D2D2D",marginTop:2}}>{kid.ultimaVacuna||"—"}</div>
+                </div>
+                <div style={{padding:"8px 0"}}>
+                  <div style={{fontSize:11,color:"#aaa"}}>Próxima vacuna</div>
+                  <div style={{fontSize:13,color:"#FF6B9D",marginTop:2,fontWeight:"bold"}}>{kid.proximaVacuna||"—"}</div>
+                </div>
+              </div>
+              <div style={{background:"white",borderRadius:20,padding:18,marginBottom:12,boxShadow:"0 2px 12px rgba(0,0,0,0.05)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                  <h3 style={{fontSize:13,color:"#FF6B9D"}}>🎯 ACTIVIDADES FIJAS</h3>
+                  <button onClick={abrirNuevaAct} style={{background:"#FDE8F0",border:"none",borderRadius:10,padding:"4px 10px",color:"#FF6B9D",fontSize:11,cursor:"pointer",fontWeight:"bold"}}>+ Agregar</button>
+                </div>
+                {acts.filter(a=>a.kidIndex===(selectedKid||0)).length===0?(
+                  <div style={{textAlign:"center",color:"#ddd",fontSize:13,padding:"8px 0"}}>Sin rutinas cargadas</div>
+                ):acts.filter(a=>a.kidIndex===(selectedKid||0)).map((a,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #F5F5F5"}}>
+                    <span style={{fontSize:12,fontWeight:"bold",color:color,minWidth:40}}>{a.hora}</span>
+                    <span style={{fontSize:13,color:"#2D2D2D",flex:1}}>{a.actividad}</span>
+                    <span style={{fontSize:11,color:"#aaa"}}>{a.dia.slice(0,3)}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:"white",borderRadius:20,padding:18,boxShadow:"0 2px 12px rgba(0,0,0,0.05)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                  <h3 style={{fontSize:13,color:"#FF6B9D"}}>🔔 RECORDATORIOS</h3>
+                  <button onClick={abrirNuevoRec} style={{background:"#FDE8F0",border:"none",borderRadius:10,padding:"4px 10px",color:"#FF6B9D",fontSize:11,cursor:"pointer",fontWeight:"bold"}}>+ Agregar</button>
+                </div>
+                {recs.filter(r=>r.kidNombre===kid.nombre||r.kidNombre==="Todos").length===0?(
+                  <div style={{textAlign:"center",color:"#ddd",fontSize:13,padding:"8px 0"}}>Sin recordatorios</div>
+                ):recs.filter(r=>r.kidNombre===kid.nombre||r.kidNombre==="Todos").map((r,i)=>{
+                  const idx=recs.indexOf(r);
+                  return(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #F5F5F5"}}>
+                      <span style={{fontSize:16}}>{r.tipo.split(" ")[0]}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,color:"#2D2D2D"}}>{r.descripcion}</div>
+                        <div style={{fontSize:11,color:"#aaa"}}>{r.fecha}{r.hora?" · "+r.hora:""}</div>
+                      </div>
+                      <button onClick={()=>toggleEstado(idx)} style={{background:r.estado==="✅ Listo"?"#E6FAF5":"#FFF3EB",border:"none",borderRadius:10,padding:"4px 8px",fontSize:11,cursor:"pointer",color:r.estado==="✅ Listo"?"#10B981":"#FF9A5C",fontWeight:"bold"}}>{r.estado==="✅ Listo"?"✅":"⏳"}</button>
+                      <button onClick={()=>abrirEditRec(idx)} style={{background:"#F5F5F5",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer",fontSize:11}}>✏️</button>
+                      <button onClick={()=>borrarRec(idx)} style={{background:"#FDE8F0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer",fontSize:11}}>🗑️</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>);
+          })()}
+        </>}
+      </div>
+
+      {/* NAV */}
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:420,background:"white",borderTop:"1px solid #F0F0F0",display:"flex",padding:"12px 0 20px",zIndex:100,boxShadow:"0 -4px 20px rgba(0,0,0,0.06)"}}>
+        {[{id:"home",icon:"🏠",label:"Inicio"},{id:"agenda",icon:"📅",label:"Agenda"},{id:"ficha",icon:"👶",label:"Fichas"}].map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"4px 0"}}>
+            <span style={{fontSize:22}}>{t.icon}</span>
+            <span style={{fontSize:11,color:tab===t.id?"#FF6B9D":"#bbb",fontWeight:tab===t.id?"bold":"normal"}}>{t.label}</span>
+            {tab===t.id&&<div style={{width:20,height:2,background:"#FF6B9D",borderRadius:2}}/>}
+          </button>
+        ))}
+      </div>
+
+      {/* MODAL HIJO */}
+      {modalHijo&&<Modal titulo={editHijo!==null?"Editar hijo":"Nuevo hijo"} onCerrar={()=>setModalHijo(false)}>
+        <EmojiPicker value={formHijo.emoji||"🌸"} onChange={v=>setFormHijo({...formHijo,emoji:v})}/>
+        <Input label="Nombre *" value={formHijo.nombre} onChange={v=>setFormHijo({...formHijo,nombre:v})} placeholder="Valentina"/>
+        <Input label="Edad" value={formHijo.edad} onChange={v=>setFormHijo({...formHijo,edad:v})} placeholder="8"/>
+        <Input label="Médico/Pediatra" value={formHijo.medico} onChange={v=>setFormHijo({...formHijo,medico:v})} placeholder="Dra. García"/>
+        <Input label="Teléfono médico" value={formHijo.telefono} onChange={v=>setFormHijo({...formHijo,telefono:v})} placeholder="011-4523-1234"/>
+        <Input label="Obra social / Prepaga" value={formHijo.obraSocial} onChange={v=>setFormHijo({...formHijo,obraSocial:v})} placeholder="OSDE"/>
+        <Input label="Grupo sanguíneo" value={formHijo.grupoSanguineo} onChange={v=>setFormHijo({...formHijo,grupoSanguineo:v})} placeholder="A+"/>
+        <Input label="Última vacuna" value={formHijo.ultimaVacuna} onChange={v=>setFormHijo({...formHijo,ultimaVacuna:v})} placeholder="Triple viral - Mar 2024"/>
+        <Input label="Próxima vacuna" value={formHijo.proximaVacuna} onChange={v=>setFormHijo({...formHijo,proximaVacuna:v})} placeholder="Antigripal - Abr 2025"/>
+        <div style={{marginTop:8}}><Btn onClick={guardarHijo} full>{editHijo!==null?"Guardar cambios":"Agregar hijo 🌸"}</Btn></div>
+      </Modal>}
+
+      {/* MODAL RUTINA */}
+      {modalAct&&<Modal titulo={editAct!==null?"Editar rutina":"Nueva rutina semanal"} onCerrar={()=>setModalAct(false)}>
+        <Select label="Día de la semana" value={formAct.dia} onChange={v=>setFormAct({...formAct,dia:v})} options={FULL_DAYS.map(d=>({value:d,label:d}))}/>
+        <Input label="Hora" value={formAct.hora} onChange={v=>setFormAct({...formAct,hora:v})} placeholder="1700" isHora={true}/>
+        <Input label="Actividad *" value={formAct.actividad} onChange={v=>setFormAct({...formAct,actividad:v})} placeholder="Ballet, Fútbol, Inglés..."/>
+        <Select label="Hijo/a" value={formAct.kidIndex} onChange={v=>setFormAct({...formAct,kidIndex:parseInt(v)})} options={kids.length>0?kids.map((k,i)=>({value:i,label:k.nombre})):[{value:0,label:"(sin hijos)"}]}/>
+        <Input label="Lugar" value={formAct.lugar} onChange={v=>setFormAct({...formAct,lugar:v})} placeholder="Club Atlético..."/>
+        <div style={{marginTop:8}}><Btn onClick={guardarAct} full>{editAct!==null?"Guardar cambios":"Agregar rutina 📅"}</Btn></div>
+      </Modal>}
+
+      {/* MODAL EVENTO */}
+      {modalEvento&&<Modal titulo={editEvento!==null?"Editar evento":"Nuevo evento"} onCerrar={()=>setModalEvento(false)}>
+        <MiniCalendario value={formEvento.fecha} onChange={v=>setFormEvento({...formEvento,fecha:v})}/>
+        <Input label="Hora" value={formEvento.hora} onChange={v=>setFormEvento({...formEvento,hora:v})} placeholder="1000" isHora={true}/>
+        <Input label="Título *" value={formEvento.titulo} onChange={v=>setFormEvento({...formEvento,titulo:v})} placeholder="Torneo de fútbol, Cumpleaños..."/>
+        <Select label="Hijo/a" value={formEvento.kidIndex} onChange={v=>setFormEvento({...formEvento,kidIndex:parseInt(v)})} options={kids.length>0?kids.map((k,i)=>({value:i,label:k.nombre})):[{value:0,label:"(sin hijos)"}]}/>
+        <Input label="Lugar" value={formEvento.lugar} onChange={v=>setFormEvento({...formEvento,lugar:v})} placeholder="Estadio, Club..."/>
+        <Input label="Nota" value={formEvento.nota} onChange={v=>setFormEvento({...formEvento,nota:v})} placeholder="Llevar ropa de repuesto..."/>
+        <div style={{marginTop:8}}><Btn onClick={guardarEvento} full disabled={!formEvento.fecha||!formEvento.titulo}>{editEvento!==null?"Guardar cambios":"Agregar evento 🗓️"}</Btn></div>
+      </Modal>}
+
+      {/* MODAL RECORDATORIO */}
+      {modalRec&&<Modal titulo={editRec!==null?"Editar recordatorio":"Nuevo recordatorio"} onCerrar={()=>setModalRec(false)}>
+        <Select label="Tipo" value={formRec.tipo} onChange={v=>setFormRec({...formRec,tipo:v})} options={["💉 Vacuna","🩺 Control médico","🦷 Odontología","📚 Colegio","🏃 Deporte","📋 Trámite","🎂 Cumpleaños"].map(t=>({value:t,label:t}))}/>
+        <Input label="Descripción *" value={formRec.descripcion} onChange={v=>setFormRec({...formRec,descripcion:v})} placeholder="Vacuna antigripal"/>
+        <Input label="Fecha (dd/mm/aaaa)" value={formRec.fecha} onChange={v=>setFormRec({...formRec,fecha:v})} placeholder="15042025" isFecha={true}/>
+        <Input label="Hora (opcional)" value={formRec.hora} onChange={v=>setFormRec({...formRec,hora:v})} placeholder="1000" isHora={true}/>
+        <Select label="Hijo/a" value={formRec.kidNombre} onChange={v=>setFormRec({...formRec,kidNombre:v})} options={[{value:"Todos",label:"Todos"},...kids.map(k=>({value:k.nombre,label:k.nombre}))]}/>
+        <div style={{marginTop:8}}><Btn onClick={guardarRec} full>{editRec!==null?"Guardar cambios":"Agregar recordatorio 🔔"}</Btn></div>
+      </Modal>}
+
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
